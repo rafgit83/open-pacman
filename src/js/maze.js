@@ -2,6 +2,7 @@
 // Laberinto 28x31 fiel a la geometria del nivel 1 de Pac-Man.
 // Se escribe como 31 strings de 28 chars (legible) y se parsea a numeros.
 //   '#' pared(1) · '.' dot(2) · ' ' vacio transitable(0) · '-' puerta pen(3)
+//   'o' power pellet(4)
 // Coordenadas: celda (x,y), origen arriba-izquierda. x in [0,27], y in [0,30].
 // Simetrico respecto al eje vertical central (entre cols 13 y 14).
 
@@ -9,7 +10,7 @@ const MAZE_STR = [
   '############################', // 0  borde
   '#............##............#', // 1
   '#.####.#####.##.#####.####.#', // 2
-  '#.####.#####.##.#####.####.#', // 3
+  '#o####.#####.##.#####.####o#', // 3  power pellets esquinas superiores
   '#.####.#####.##.#####.####.#', // 4
   '#..........................#', // 5
   '#.####.##.########.##.####.#', // 6
@@ -29,7 +30,7 @@ const MAZE_STR = [
   '#............##............#', // 20
   '#.####.#####.##.#####.####.#', // 21
   '#.####.#####.##.#####.####.#', // 22
-  '#...##................##...#', // 23  fila inicio Pacman (13,23)
+  '#o..##................##..o#', // 23  fila inicio Pacman (13,23) + power pellets inferiores
   '###.##.##.########.##.##.###', // 24
   '###.##.##.########.##.##.###', // 25
   '#......##....##....##......#', // 26
@@ -43,6 +44,7 @@ function parseTile( ch ) {
   if ( ch === '#' ) return 1;
   if ( ch === '.' ) return 2;
   if ( ch === '-' ) return 3;
+  if ( ch === 'o' ) return 4; // power pellet
   return 0; // espacio = vacio transitable
 }
 
@@ -58,9 +60,16 @@ const GHOST_STARTS = [
   { x: 14, y: 14, kind: 'random', exitDelayFrames: 240 }, // dentro de la pen, espera 4s a 60fps
 ];
 
+const POWER_PELLET_FRAMES    = 360; // 6s a 60fps
+const POWER_FLASH_FRAMES     = 120; // ultimos 2s: parpadeo de aviso
+const GHOST_FRIGHTENED_SPEED = 0.05; // la mitad de GHOST_SPEED (0.1)
+
 window.MAZE = MAZE;
 window.TUNNEL_ROW = TUNNEL_ROW;
 window.PACMAN_START = PACMAN_START;
 window.PEN_DOOR_COLS = PEN_DOOR_COLS;
 window.PEN_OUT_ROW = PEN_OUT_ROW;
 window.GHOST_STARTS = GHOST_STARTS;
+window.POWER_PELLET_FRAMES = POWER_PELLET_FRAMES;
+window.POWER_FLASH_FRAMES = POWER_FLASH_FRAMES;
+window.GHOST_FRIGHTENED_SPEED = GHOST_FRIGHTENED_SPEED;
