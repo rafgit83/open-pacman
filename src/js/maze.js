@@ -51,12 +51,16 @@ const MAZE = MAZE_STR.map( ( row ) => row.split( '' ).map( parseTile ) );
 
 const TUNNEL_ROW = 14;
 const PACMAN_START = { x: 13, y: 23 };
+const PEN_DOOR_COLS = [13, 14]; // columnas de la puerta (celdas '-', fila 12)
+const PEN_OUT_ROW = 11;         // primera fila fuera de la pen
 const GHOST_STARTS = [
-  { x: 13, y: 14, kind: 'hunter' }, // dentro de la pen
-  { x: 14, y: 14, kind: 'random' }, // dentro de la pen
+  { x: 13, y: 14, kind: 'hunter', exitDelayFrames: 0 },   // dentro de la pen, sale al instante
+  { x: 14, y: 14, kind: 'random', exitDelayFrames: 240 }, // dentro de la pen, espera 4s a 60fps
 ];
 
 window.MAZE = MAZE;
 window.TUNNEL_ROW = TUNNEL_ROW;
 window.PACMAN_START = PACMAN_START;
+window.PEN_DOOR_COLS = PEN_DOOR_COLS;
+window.PEN_OUT_ROW = PEN_OUT_ROW;
 window.GHOST_STARTS = GHOST_STARTS;

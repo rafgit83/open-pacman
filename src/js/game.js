@@ -1,6 +1,6 @@
 // game.js
 // Estado y reglas. Depende de globals de maze.js: MAZE, TUNNEL_ROW,
-// PACMAN_START, GHOST_STARTS.
+// PACMAN_START, GHOST_STARTS, PEN_DOOR_COLS, PEN_OUT_ROW.
 
 const DIRS = {
   left: { x: -1, y: 0 },
@@ -42,6 +42,8 @@ function createGame() {
       dir: 'up',
       speed: GHOST_SPEED,
       kind: g.kind,
+      waitFrames: g.exitDelayFrames, // frames restantes hasta su turno de salida
+      penState: g.exitDelayFrames > 0 ? 'waiting' : 'leaving',
     } ) ),
   };
 }
@@ -52,25 +54,27 @@ function aligned( v ) {
 
 // Una celda es muro para el actor dado?
 //   pacman: bloqueado por pared (1) y puerta (3)
-//   ghost:  bloqueado solo por pared (1)
-function isWall( grid, x, y, actor ) {
+//   ghost:  bloqueado por pared (1); la puerta (3) solo se cruza en 'leaving'
+//           (salir de la pen si, re-entrar no)
+function isWall( grid, x, y, actor, penState ) {
   if ( y < 0 || y >= grid.length ) return true;
   if ( x < 0 || x >= grid[ 0 ].length ) return true;
   const v = grid[ y ][ x ];
   if ( v === 1 ) return true;
   if ( v === 3 && actor === 'pacman' ) return true;
+  if ( v === 3 && actor === 'ghost' && penState !== 'leaving' ) return true;
   return false;
 }
 
 // Puede el actor avanzar desde (x,y) en la direccion dir?
-function canMove( grid, x, y, dir, actor ) {
+function canMove( grid, x, y, dir, actor, penState ) {
   const d = DIRS[ dir ];
   if ( !d ) return false;
   const tx = x + d.x;
   const ty = y + d.y;
   // Tunel: salir por un borde en la fila del tunel siempre es valido.
   if ( ty === TUNNEL_ROW && ( tx < 0 || tx >= grid[ 0 ].length ) ) return true;
-  return !isWall( grid, tx, ty, actor );
+  return !isWall( grid, tx, ty, actor, penState );
 }
 
 function wrapTunnel( a, width ) {
@@ -115,7 +119,7 @@ function decideGhost( game, g ) {
   const p = game.pacman;
 
   const options = Object.keys( DIRS ).filter(
-    ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
+    ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost', g.penState )
   );
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
@@ -141,15 +145,41 @@ function decideGhost( game, g ) {
   }
 }
 
+// Mini-regla de salida de la pen (solo para penState 'leaving'):
+// si la columna no es de puerta (13/14), paso horizontal hacia la mas
+// cercana; si lo es, subir por la puerta.
+function penExitDir( x ) {
+  if ( PEN_DOOR_COLS.includes( x ) ) return 'up';
+  return x < PEN_DOOR_COLS[ 0 ] ? 'right' : 'left';
+}
+
 function moveGhost( game, g ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
 
+  // Cuenta atras de salida de la pen: mientras espera, la puerta esta
+  // cerrada (isWall) y se mueve con la IA normal dentro de la pen.
+  if ( g.penState === 'waiting' ) {
+    g.waitFrames--;
+    if ( g.waitFrames <= 0 ) g.penState = 'leaving';
+  }
+
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
-    decideGhost( game, g );
-    if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
+
+    // Alineado fuera de la pen: puerta cerrada e IA normal desde ahora.
+    if ( g.penState === 'leaving' && g.y <= PEN_OUT_ROW ) {
+      g.penState = 'out';
+    }
+
+    if ( g.penState === 'leaving' ) {
+      // Mini-regla de salida: a la columna de puerta mas cercana y subir.
+      g.dir = penExitDir( g.x );
+    } else {
+      decideGhost( game, g );
+    }
+    if ( !canMove( grid, g.x, g.y, g.dir, 'ghost', g.penState ) ) return;
   }
 
   const d = DIRS[ g.dir ];
@@ -165,9 +195,13 @@ function resetPositions( game ) {
   p.dir = 'left';
   p.nextDir = null;
   game.ghosts.forEach( ( g, i ) => {
-    g.x = GHOST_STARTS[ i ].x;
-    g.y = GHOST_STARTS[ i ].y;
+    const s = GHOST_STARTS[ i ];
+    g.x = s.x;
+    g.y = s.y;
     g.dir = 'up';
+    // Restaurar el ciclo completo de salida de la pen.
+    g.waitFrames = s.exitDelayFrames;
+    g.penState = s.exitDelayFrames > 0 ? 'waiting' : 'leaving';
   } );
 }
 
