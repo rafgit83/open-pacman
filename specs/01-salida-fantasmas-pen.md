@@ -1,6 +1,6 @@
 # SPEC 01 — Salida de los fantasmas de la pen
 
-> **Estado:** Aprobado
+> **Estado:** Implemented
 > **Depende de:** —
 > **Fecha:** 2026-10-02
 > **Objetivo:** Que los fantasmas salgan de la pen de forma escalonada y garantizada, al empezar la partida y tras cada vida perdida.

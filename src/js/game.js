@@ -1,6 +1,7 @@
 // game.js
 // Estado y reglas. Depende de globals de maze.js: MAZE, TUNNEL_ROW,
-// PACMAN_START, GHOST_STARTS, PEN_DOOR_COLS, PEN_OUT_ROW.
+// PACMAN_START, GHOST_STARTS, PEN_DOOR_COLS, PEN_OUT_ROW,
+// POWER_PELLET_FRAMES, POWER_FLASH_FRAMES, GHOST_FRIGHTENED_SPEED.
 
 const DIRS = {
   left: { x: -1, y: 0 },
@@ -21,13 +22,15 @@ function createGame() {
   grid[ PACMAN_START.y ][ PACMAN_START.x ] = 0;
 
   let dots = 0;
-  for ( const row of grid ) for ( const v of row ) if ( v === 2 ) dots++;
+  for ( const row of grid ) for ( const v of row ) if ( v === 2 || v === 4 ) dots++;
 
   return {
     state: 'start',
     score: 0,
     lives: 3,
     dotsRemaining: dots,
+    powerFrames: 0, // frames restantes de modo poder (0 = juego normal)
+    ghostChain: 0,  // fantasmas comidos con el pellet actual
     grid,
     pacman: {
       x: PACMAN_START.x,
@@ -44,6 +47,7 @@ function createGame() {
       kind: g.kind,
       waitFrames: g.exitDelayFrames, // frames restantes hasta su turno de salida
       penState: g.exitDelayFrames > 0 ? 'waiting' : 'leaving',
+      frightened: false,
     } ) ),
   };
 }
@@ -103,6 +107,15 @@ function movePacman( game ) {
       grid[ p.y ][ p.x ] = 0;
       game.score += 10;
       game.dotsRemaining--;
+    }
+    // Comer power pellet: puntos, activar modo poder y asustar a todos.
+    if ( grid[ p.y ][ p.x ] === 4 ) {
+      grid[ p.y ][ p.x ] = 0;
+      game.score += 50;
+      game.dotsRemaining--;
+      game.powerFrames = POWER_PELLET_FRAMES;
+      game.ghostChain = 0;
+      game.ghosts.forEach( ( g ) => ( g.frightened = true ) );
     }
     // Si no puede seguir, se detiene en la celda.
     if ( !canMove( grid, p.x, p.y, p.dir, 'pacman' ) ) return;
@@ -182,9 +195,11 @@ function moveGhost( game, g ) {
     if ( !canMove( grid, g.x, g.y, g.dir, 'ghost', g.penState ) ) return;
   }
 
+  // Velocidad efectiva: los asustados van a la mitad.
+  const sp = g.frightened ? GHOST_FRIGHTENED_SPEED : g.speed;
   const d = DIRS[ g.dir ];
-  g.x += d.x * g.speed;
-  g.y += d.y * g.speed;
+  g.x += d.x * sp;
+  g.y += d.y * sp;
   wrapTunnel( g, width );
 }
 
@@ -203,6 +218,10 @@ function resetPositions( game ) {
     g.waitFrames = s.exitDelayFrames;
     g.penState = s.exitDelayFrames > 0 ? 'waiting' : 'leaving';
   } );
+  // Perder vida cancela el modo poder.
+  game.powerFrames = 0;
+  game.ghostChain = 0;
+  game.ghosts.forEach( ( g ) => ( g.frightened = false ) );
 }
 
 function collides( a, b ) {
@@ -210,19 +229,46 @@ function collides( a, b ) {
 }
 
 function update( game ) {
+  // Modo poder: cuenta atras global. Al agotarse, todos los fantasmas
+  // vuelven a la normalidad y la cadena de puntos se reinicia.
+  if ( game.powerFrames > 0 ) {
+    game.powerFrames--;
+    if ( game.powerFrames === 0 ) {
+      game.ghosts.forEach( ( g ) => ( g.frightened = false ) );
+      game.ghostChain = 0;
+    }
+  }
+
   movePacman( game );
   game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
 
-  for ( const g of game.ghosts ) {
-    if ( collides( game.pacman, g ) ) {
-      game.lives--;
-      if ( game.lives <= 0 ) {
-        game.state = 'lost';
-        return;
-      }
-      resetPositions( game );
-      break;
+  for ( let i = 0; i < game.ghosts.length; i++ ) {
+    const g = game.ghosts[ i ];
+    if ( !collides( game.pacman, g ) ) continue;
+
+    // Fantasma comible: puntos en cadena y de vuelta a la pen para salir
+    // enseguida (puerta abierta en 'leaving', SPEC 01).
+    if ( g.frightened ) {
+      game.score += 200 * Math.pow( 2, game.ghostChain );
+      game.ghostChain++;
+      const s = GHOST_STARTS[ i ];
+      g.x = s.x;
+      g.y = s.y;
+      g.dir = 'up';
+      g.waitFrames = 0;
+      g.penState = 'leaving';
+      g.frightened = false;
+      continue;
     }
+
+    // Fantasma peligroso: pierde una vida (comportamiento intacto).
+    game.lives--;
+    if ( game.lives <= 0 ) {
+      game.state = 'lost';
+      return;
+    }
+    resetPositions( game );
+    break;
   }
 
   if ( game.dotsRemaining <= 0 ) game.state = 'won';
